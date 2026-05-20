@@ -253,15 +253,15 @@ function _versionLessThan(a: string, b: string): boolean {
     return false;
 }
 
-/* v2.89.127 — 포트 4825에 이미 떠있는 Bridge가 우리 것인지 식별.
+/* v2.89.127 — 포트 4826에 이미 떠있는 Bridge가 우리 것인지 식별.
    - ours: nyang-ai-bridge 식별자
    - version: 그 인스턴스 버전 (옛 버전이면 자동 인계 대상)
    - pid: 종료 대상 PID */
 async function _probeExistingBridge(): Promise<{ ours: boolean; version: string; pid: number }> {
     try {
-        const r = await axios.get('http://127.0.0.1:4825/ping', { timeout: 1500 });
+        const r = await axios.get('http://127.0.0.1:4826/ping', { timeout: 1500 });
         const d = r.data;
-        if (d && d.app === 'nyang-ai-bridge') {
+        if (d && (d.app === 'nyang-ai-bridge' || d.app === 'connect-ai-bridge')) {
             return { ours: true, version: String(d.version || ''), pid: Number(d.pid || 0) };
         }
     } catch { /* not running or different app */ }
@@ -269,7 +269,7 @@ async function _probeExistingBridge(): Promise<{ ours: boolean; version: string;
 }
 
 /* v2.89.120 — 특정 TCP 포트 점유 프로세스 강제 종료 (cross-platform).
-   "이걸 메인으로 하기" UX 에 사용: 다른 Anti-Gravity 인스턴스가 4825 잡고 있을 때
+   "이걸 메인으로 하기" UX 에 사용: 다른 Anti-Gravity 인스턴스가 4826 잡고 있을 때
    해당 PID 찾아 SIGKILL. 종료된 PID 배열 반환 (빈 배열이면 미발견).
    - macOS/Linux: `lsof -ti:<port>` → 한 줄당 PID → `kill -9 <pid>`
    - Windows: `netstat -ano` 파싱 → LISTENING 행의 마지막 컬럼 PID → `taskkill /F /PID`
@@ -296,7 +296,10 @@ function _killProcessesOnPort(port: number): number[] {
             }
         } else {
             /* macOS / Linux: lsof -ti:<port> */
-            const r = spawnSync('lsof', ['-ti', `:${port}`], { encoding: 'utf-8', timeout: 5000 });
+            let r = spawnSync('lsof', ['-ti', `:${port}`], { encoding: 'utf-8', timeout: 5000 });
+            if (r.error || (r.stdout || '').trim() === '') {
+                r = spawnSync('/usr/sbin/lsof', ['-ti', `:${port}`], { encoding: 'utf-8', timeout: 5000 });
+            }
             const pids = (r.stdout || '').split(/\r?\n/).map(s => parseInt(s.trim(), 10)).filter(p => !isNaN(p) && p > 0 && p !== ourPid);
             for (const pid of pids) {
                 const k = spawnSync('kill', ['-9', String(pid)], { encoding: 'utf-8', timeout: 3000 });
@@ -8000,7 +8003,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // ==========================================
-    // EZER AI <-> NYANG AI Bridge Server (Port 4825)
+    // EZER AI <-> NYANG AI Bridge Server (Port 4826)
     // ==========================================
     try {
         const server = http.createServer((req, res) => {
@@ -8474,7 +8477,7 @@ export function activate(context: vscode.ExtensionContext) {
                 res.end();
             }
         });
-        /* v2.89.120 — 포트 4825 충돌 시 사용자에게 "이걸 메인으로" 선택권.
+        /* v2.89.120 — 포트 4826 충돌 시 사용자에게 "이걸 메인으로" 선택권.
            이전엔 그냥 에러만 띄우고 끝 → 사용자가 어느 창 닫아야 할지도 모름 + EZER
            연동 깨짐. 이제: lsof / taskkill 로 점유 프로세스 PID 찾아 종료 + 재시도. */
         /* v2.89.126 — 재시작 신뢰도 ↑. 이전 v2.89.120은:
@@ -8484,16 +8487,16 @@ export function activate(context: vscode.ExtensionContext) {
            해결: close() 후 새로 listen + 명시 성공 popup + retry-guard */
         let _bridgeRetryCount = 0;
         const _tryStartBridge = (isRetry = false) => {
-            server.listen(4825, '127.0.0.1', () => {
-                console.log('[NYANG AI Bridge] listening on http://127.0.0.1:4825');
+            server.listen(4826, '127.0.0.1', () => {
+                console.log('[NYANG AI Bridge] listening on http://127.0.0.1:4826');
                 if (isRetry) {
                     /* 성공 명시 popup — 사용자가 분명히 봄 */
                     vscode.window.showInformationMessage(
-                        '🟢 Bridge 인계 완료! 이 인스턴스가 메인 (포트 4825). EZER 연동 정상 작동.'
+                        '🟢 Bridge 인계 완료! 이 인스턴스가 메인 (포트 4826). EZER 연동 정상 작동.'
                     );
                     vscode.window.setStatusBarMessage('🟢 NYANG AI Bridge: 이 인스턴스가 메인', 8000);
                 } else {
-                    vscode.window.setStatusBarMessage('🟢 NYANG AI Bridge: 포트 4825 listening', 4000);
+                    vscode.window.setStatusBarMessage('🟢 NYANG AI Bridge: 포트 4826 listening', 4000);
                 }
             });
         };
@@ -8508,7 +8511,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                /* v2.89.127 — 자동 판단: 4825 잡고 있는 게 우리 Bridge 인지 ping 으로 확인.
+                /* v2.89.127 — 자동 판단: 4826 잡고 있는 게 우리 Bridge 인지 ping 으로 확인.
                    1) 우리 거 + 같은 버전 → 조용히 공유 모드 (popup 없음, 사용자 인지 X)
                    2) 우리 거 + 옛 버전 → 자동 인계 (popup 없음)
                    3) 다른 앱 → 사용자에게 선택 (옛 popup 유지)
@@ -8525,7 +8528,7 @@ export function activate(context: vscode.ExtensionContext) {
                 if (probe.ours && probe.version && _versionLessThan(probe.version, _CONNECT_AI_VERSION)) {
                     /* 옛 버전 — 자동 인계. 사용자에게 한 줄 알림만. */
                     console.log(`[NYANG AI Bridge] 옛 버전(${probe.version}) 감지 → 자동 인계 시작`);
-                    const killed = _killProcessesOnPort(4825);
+                    const killed = _killProcessesOnPort(4826);
                     if (killed.length > 0) {
                         vscode.window.setStatusBarMessage(
                             `🔄 옛 Bridge(${probe.version}) 자동 인계 → ${_CONNECT_AI_VERSION}`, 6000
@@ -8540,15 +8543,15 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                /* 미상의 앱이 4825 잡고 있음 → 옛 사용자 확인 다이얼로그 */
+                /* 미상의 앱이 4826 잡고 있음 → 옛 사용자 확인 다이얼로그 */
                 const choice = await vscode.window.showWarningMessage(
-                    '🚫 포트 4825가 다른 앱에 사용 중입니다 (NYANG AI 아님).\n자동 인계할까요?',
+                    '🚫 포트 4826가 다른 앱에 사용 중입니다 (NYANG AI 아님).\n자동 인계할까요?',
                     { modal: false },
                     '🎯 인계 (다른 앱 종료)',
                     '🚫 이번엔 보기 모드'
                 );
                 if (choice === '🎯 인계 (다른 앱 종료)') {
-                    const killed = _killProcessesOnPort(4825);
+                    const killed = _killProcessesOnPort(4826);
                     if (killed.length > 0) {
                         vscode.window.showInformationMessage(`✅ 점유 프로세스 종료됨 (PID ${killed.join(', ')}). 재시작...`);
                         setTimeout(() => {
@@ -8557,7 +8560,7 @@ export function activate(context: vscode.ExtensionContext) {
                         }, 1500);
                     } else {
                         vscode.window.showErrorMessage(
-                            '⚠️ 포트 점유 프로세스를 찾지 못했어요. 직접 점검 필요: `lsof -ti:4825 | xargs kill -9`'
+                            '⚠️ 포트 점유 프로세스를 찾지 못했어요. 직접 점검 필요: `lsof -ti:4826 | xargs kill -9`'
                         );
                     }
                 } else {

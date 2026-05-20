@@ -14,7 +14,7 @@ code --install-extension connect-ai-lab-2.89.150.vsix --force
 # Cmd+Shift+P → Developer: Reload Window
 
 # 3. 시스템 ping 으로 활성화 확인
-curl -s http://127.0.0.1:4825/ping | python3 -m json.tool
+curl -s http://127.0.0.1:4826/ping | python3 -m json.tool
 ```
 
 **필수 확인:**

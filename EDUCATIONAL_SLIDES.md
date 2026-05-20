@@ -439,11 +439,11 @@ window.addEventListener('message', e => {
 
 ## 📚 E-2. "Bridge 협력 모델 (Cooperative Singleton)"
 
-**큰 질문:** "여러 Anti-Gravity 창 띄우면 4825 포트 충돌하지 않나?"
+**큰 질문:** "여러 Anti-Gravity 창 띄우면 4826 포트 충돌하지 않나?"
 
 **문제:**
 ```
-창 1: Connect AI 활성화 → Bridge :4825 점유
+창 1: Connect AI 활성화 → Bridge :4826 점유
 창 2: Connect AI 활성화 시도 → "EADDRINUSE" 충돌
        → 사이드바 아이콘 사라짐 (webview 등록 실패)
 ```
@@ -454,7 +454,7 @@ Bridge /ping 응답 확장:
 { app: 'connect-ai-bridge', version: '2.89.154', pid: 12345 }
 
 새 인스턴스 활성화:
-  1. 4825 시도
+  1. 4826 시도
   2. 실패 → /ping 으로 누가 잡았는지 확인
   3. (a) 같은 앱·같은 버전 → 조용히 공유 모드
      (b) 같은 앱·옛 버전 → 자동 인계 (PID kill)
